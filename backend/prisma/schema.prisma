@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @unique
+  password       String
+  country        String?
+  state          String?
+  phone          String?
+  role           Role     @default(SALES_EXECUTIVE)
+  inviteCode     String?  @unique
+  isApproved     Boolean  @default(false)
+  assignedAdmin  User?    @relation("AdminToUsers", fields: [assignedAdminId], references: [id])
+  assignedAdminId Int?
+  createdAt      DateTime @default(now())
+
+  // Relation for admins to know their users
+  managedUsers   User[]   @relation("AdminToUsers")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  SALES_EXECUTIVE
+}
