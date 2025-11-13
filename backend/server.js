@@ -1,28 +1,29 @@
 import dotenv from "dotenv";
+import http from "http";
+import { PrismaClient } from "@prisma/client";
+import app from "./src/app.js";
+import { initIO } from "./src/utils/socket.js";
+
 dotenv.config();
 
-import app from "./src/app.js";
-import prisma from "./src/config/prismaClient.js";
+const PORT = process.env.PORT || 8080;
+const prisma = new PrismaClient();
 
-const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+export const io = initIO(server);
 
-// Retry logic for free-tier sleeping DB
-async function connectWithRetry() {
+const startServer = async () => {
   try {
     await prisma.$connect();
-    connected = true;
-    console.log("✅ Connected to database successfully");
-  } catch (err) {
-    console.error(
-      "❌ Failed to connect to database, retrying in 5s...",
-      err.message
-    );
-    await new Promise((res) => setTimeout(res, 5000));
+    console.log("✅ Prisma connected to database successfully!");
+
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error(`❌ Error starting server: ${error.message}`);
+    process.exit(1);
   }
-}
+};
 
-connectWithRetry();
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+startServer();

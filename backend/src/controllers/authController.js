@@ -1,141 +1,148 @@
-import prisma from "../config/prismaClient.js";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
-import { generateToken } from "../utils/generateToken.js";
+import { generateCookie } from "../utils/generateCookie.js";
+import { sendEmail } from "../utils/mailer.js";
 
-// Register user
-export const registerUser = async (req, res) => {
+const prisma = new PrismaClient();
+
+// ----------------- REGISTER -----------------
+export const register = async (req, res, next) => {
   try {
-    const { name, email, password, role, country, state, phone, inviteCode } = req.body;
+    const { name, email, password, role, companyName, companyId, managerId } = req.body;
+    const validRoles = ["ADMIN", "MANAGER", "SALES"];
+    if (!validRoles.includes(role)) throw new Error("Invalid role");
 
-    // Admin can register freely
-    if (role === "ADMIN") {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const admin = await prisma.user.create({
-        data: {
-          name,
-          email,
-          password: hashedPassword,
-          country,
-          state,
-          phone,
-          role,
-          isApproved: true, // Admin auto-approved
-        },
-      });
-      return res.status(201).json({ message: "Admin registered successfully", user: admin });
-    }
+    const normalizedEmail = email.toLowerCase();
 
-    // For MANAGER or SALES_EXECUTIVE → require invite code
-    if (!inviteCode) {
-      return res.status(400).json({ message: "Invite code is required for this role" });
-    }
-
-    // Find Admin by invite code
-    const admin = await prisma.user.findFirst({ where: { inviteCode, role: "ADMIN" } });
-    if (!admin) {
-      return res.status(400).json({ message: "Invalid invite code" });
-    }
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser) throw new Error("User already exists");
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        country,
-        state,
-        phone,
-        role,
-        isApproved: false, // Require admin approval
-        assignedAdminId: admin.id, // Link user to admin
-      },
-    });
+    let finalCompanyId;
 
-    res.status(201).json({
-      message: `Registration successful. Waiting for Admin approval.`,
-      user,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Login user
-export const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
-
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ message: "Invalid credentials" });
-
-    if (!user.isApproved) {
-      return res.status(403).json({
-        message: "Your account is not approved by Admin yet.",
-      });
+    if (role === "ADMIN") {
+      if (!companyName) throw new Error("Company name required for Admin");
+      const company = await prisma.company.create({ data: { name: companyName } });
+      finalCompanyId = company.id;
+    } else {
+      if (!companyId) throw new Error("CompanyId required for Manager/Sales");
+      const companyExists = await prisma.company.findUnique({ where: { id: companyId } });
+      if (!companyExists) throw new Error("Company not found");
+      finalCompanyId = companyId;
     }
 
-    const token = generateToken(user);
+    let user;
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    switch (role) {
+      case "ADMIN":
+        user = await prisma.user.create({
+          data: { name, email: normalizedEmail, password: hashedPassword, role, companyId: finalCompanyId, managerId: null },
+        });
+        break;
+      case "MANAGER":
+        user = await prisma.user.create({
+          data: { name, email: normalizedEmail, password: hashedPassword, role, companyId: finalCompanyId, managerId: null },
+        });
+        user = await prisma.user.update({ where: { id: user.id }, data: { managerId: user.id } });
+        break;
+      case "SALES":
+        if (!managerId) throw new Error("ManagerId required for Sales");
+        const manager = await prisma.user.findUnique({ where: { id: managerId } });
+        if (!manager || manager.companyId !== finalCompanyId || manager.role !== "MANAGER") {
+          throw new Error("Invalid managerId");
+        }
+        user = await prisma.user.create({
+          data: { name, email: normalizedEmail, password: hashedPassword, role, companyId: finalCompanyId, managerId },
+        });
+        break;
+    }
+
+    generateCookie(res, user);
+
+    sendEmail({
+      to: normalizedEmail,
+      subject: "Welcome to CRM Platform",
+      text: `Hi ${name}, welcome to our CRM platform!`,
+      html: `<p>Hi <b>${name}</b>, welcome to our CRM platform!</p>`,
+    }).catch(() => {}); // don't throw email errors
+
+    res.status(201).json({
+      success: true,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, companyId: user.companyId, managerId: user.managerId },
+      message: "Registration successful",
     });
-
-    res.status(200).json({ message: "Login successful", user });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// Admin generates invite code
-export const generateInvite = async (req, res) => {
+// ----------------- LOGIN -----------------
+export const login = async (req, res, next) => {
   try {
-    const code = Math.random().toString(36).substring(2, 8); // 6-char code
-    const adminId = req.user.id;
+    const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase();
 
-    await prisma.user.update({
-      where: { id: adminId },
-      data: { inviteCode: code },
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) throw new Error("Invalid credentials");
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) throw new Error("Invalid credentials");
+
+    generateCookie(res, user);
+
+    res.json({
+      success: true,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, companyId: user.companyId, managerId: user.managerId },
+      message: "Login successful",
     });
-
-    res.json({ inviteCode: code });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// Admin approves a pending user
-export const approveUser = async (req, res) => {
+// ----------------- LOGOUT -----------------
+export const logout = async (req, res, next) => {
   try {
-    const { userId } = req.body;
-
-    const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    await prisma.user.update({
-      where: { id: Number(userId) },
-      data: { isApproved: true },
-    });
-
-    res.json({ message: `${user.role} approved successfully.` });
+    res.clearCookie("token", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
+    res.json({ success: true, message: "Logged out successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-// Get all pending users for this Admin
-export const getPendingUsers = async (req, res) => {
+// ----------------- GET PROFILE -----------------
+export const getProfile = async (req, res, next) => {
   try {
-    const users = await prisma.user.findMany({
-      where: { assignedAdminId: req.user.id, isApproved: false },
-    });
-    res.json(users);
+    const { id, name, email, role, companyId, managerId } = req.user;
+    res.json({ success: true, user: { id, name, email, role, companyId, managerId } });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
+  }
+};
+
+// ----------------- GET ALL USERS -----------------
+export const getAllUsers = async (req, res, next) => {
+  try {
+    let users;
+
+    if (req.user.role === "ADMIN") {
+      users = await prisma.user.findMany({
+        where: { companyId: req.user.companyId },
+        select: { id: true, name: true, email: true, role: true, companyId: true, managerId: true, createdAt: true, updatedAt: true },
+        orderBy: [{ role: "asc" }, { name: "asc" }],
+      });
+    } else if (req.user.role === "MANAGER") {
+      users = await prisma.user.findMany({
+        where: { OR: [{ id: req.user.id }, { managerId: req.user.id }] },
+        select: { id: true, name: true, email: true, role: true, companyId: true, managerId: true, createdAt: true, updatedAt: true },
+        orderBy: [{ role: "asc" }, { name: "asc" }],
+      });
+    } else {
+      throw new Error("Access denied");
+    }
+
+    res.json({ success: true, users });
+  } catch (error) {
+    next(error);
   }
 };

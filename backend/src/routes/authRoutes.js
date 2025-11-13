@@ -1,22 +1,24 @@
 import express from "express";
 import {
-  registerUser,
-  loginUser,
-  generateInvite,
-  approveUser,
-  getPendingUsers
+  register,
+  login,
+  logout,
+  getProfile,
+  getAllUsers,
 } from "../controllers/authController.js";
-import { protect, authorizeRoles } from "../middlewares/authMiddleware.js";
+
+
+import { protect,authorize } from "../middlewares/authMiddleware.js"; // JWT auth middleware
 
 const router = express.Router();
 
-// Public routes
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+// ----------------- AUTH ROUTES -----------------
+router.post("/register", register); // Only Admin can create users
+router.post("/login", login);
+router.post("/logout", protect, logout);
+router.get("/profile", protect, getProfile);
+router.get("/users", protect, authorize(["ADMIN", "MANAGER"]), getAllUsers);
 
-// Admin-only routes
-router.post("/generate-invite", protect, authorizeRoles("ADMIN"), generateInvite);
-router.post("/approve-user", protect, authorizeRoles("ADMIN"), approveUser);
-router.get("/pending-users", protect, authorizeRoles("ADMIN"), getPendingUsers);
+
 
 export default router;
