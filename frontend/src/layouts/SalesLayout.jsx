@@ -1,6 +1,7 @@
 import { Outlet, Link } from "react-router-dom";
-
+import { useAuth } from "../context/AuthContext";
 export default function SalesLayout() {
+  const { logout } = useAuth();
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
@@ -19,6 +20,13 @@ export default function SalesLayout() {
           </Link>
           <Link to="/sales/profile" className="block hover:text-green-300">
             My Profile
+          </Link>
+          <Link
+            to="/login"
+            className="block hover:text-blue-400"
+            onClick={logout}
+          >
+            Logout
           </Link>
         </nav>
       </aside>

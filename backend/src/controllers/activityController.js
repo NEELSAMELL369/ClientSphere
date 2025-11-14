@@ -7,20 +7,30 @@ export const getAllActivities = async (req, res, next) => {
     let whereClause = {};
 
     if (req.user.role === "ADMIN") {
-      // Admin sees all activities in the company
-      whereClause = { lead: { companyId: req.user.companyId } };
+      // Admin: all company activities
+      whereClause = {
+        lead: {
+          companyId: req.user.companyId,
+        },
+      };
     } else if (req.user.role === "MANAGER") {
-      // Manager sees own + team activities
+      // Manager: own + team's activities
       const team = await prisma.user.findMany({
         where: { managerId: req.user.id },
         select: { id: true },
       });
+
       const teamIds = team.map((u) => u.id);
+
       whereClause = {
-        lead: { ownerId: { in: [req.user.id, ...teamIds] } },
+        lead: {
+          ownerId: {
+            in: [req.user.id, ...teamIds],
+          },
+        },
       };
     } else {
-      // Sales sees only own activities
+      // Sales: only activities created by themselves
       whereClause = { createdById: req.user.id };
     }
 
@@ -28,8 +38,20 @@ export const getAllActivities = async (req, res, next) => {
       where: whereClause,
       orderBy: { createdAt: "desc" },
       include: {
-        lead: { select: { id: true, title: true, ownerId: true } },
-        createdBy: { select: { id: true, name: true, role: true } },
+        lead: {
+          select: {
+            id: true,
+            title: true,
+            ownerId: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
       },
     });
 

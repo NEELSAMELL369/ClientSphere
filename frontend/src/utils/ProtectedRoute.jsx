@@ -1,16 +1,17 @@
-import { Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-/**
- * ProtectedRoute Component
- * - Checks if user is authenticated
- * - Optionally checks user role
- * - Redirects to /login if not authenticated
- */
-export default function ProtectedRoute({ children, roles = [] }) {
-  const { user, loading, isAuthenticated } = useAuth();
+export default function ProtectedRoute({ roles = [] }) {
+  const { user, loading, isAuthenticated, initializeUser } = useAuth();
 
-  // Wait for authentication check
+  // Run once after mount to fetch user if not initialized
+  useEffect(() => {
+    if (!user && !loading) {
+      initializeUser();
+    }
+  }, [user, loading, initializeUser]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -19,13 +20,9 @@ export default function ProtectedRoute({ children, roles = [] }) {
     );
   }
 
-  // Not logged in → redirect to login
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  // Role-based protection
-  if (roles.length > 0 && !roles.includes(user?.role)) {
+  if (roles.length && !roles.includes(user?.role)) {
     return (
       <div className="flex flex-col justify-center items-center min-h-screen">
         <h2 className="text-2xl font-semibold text-red-500">Access Denied</h2>
@@ -36,6 +33,5 @@ export default function ProtectedRoute({ children, roles = [] }) {
     );
   }
 
-  // Authorized → render child component
-  return children;
+  return <Outlet />;
 }

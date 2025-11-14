@@ -16,12 +16,12 @@ const API = {
     delete: (id) => `${BASE_URL}/leads/${id}`,
   },
   activities: {
-    getAll: `${BASE_URL}/activities/all`, // or `/activities` if you switch to GET
+    getAll: `${BASE_URL}/activity/all`, // or `/activities` if you switch to GET
   },
   notifications: {
-    getAll: `${BASE_URL}/notifications`,
-    markAsRead: (id) => `${BASE_URL}/notifications/${id}/read`,
-    delete: (id) => `${BASE_URL}/notifications/${id}`,
+    getAll: `${BASE_URL}/notification`,
+    markAsRead: (id) => `${BASE_URL}/notification/${id}/read`,
+    delete: (id) => `${BASE_URL}/notification/${id}`,
   },
 };
 

@@ -4,6 +4,6 @@ import { protect, authorize } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
-router.post("/all", protect, authorize(["ADMIN", "MANAGER", "SALES"]), getAllActivities);
+router.get("/all", protect, authorize(["ADMIN", "MANAGER", "SALES"]), getAllActivities);
 
 export default router;

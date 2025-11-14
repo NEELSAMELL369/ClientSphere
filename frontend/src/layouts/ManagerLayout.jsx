@@ -1,6 +1,7 @@
 import { Outlet, Link } from "react-router-dom";
-
+import { useAuth } from "../context/AuthContext";
 export default function ManagerLayout() {
+  const { logout } = useAuth();
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
@@ -19,6 +20,13 @@ export default function ManagerLayout() {
           </Link>
           <Link to="/manager/activities" className="block hover:text-blue-300">
             Activities
+          </Link>
+          <Link
+            to="/login"
+            className="block hover:text-blue-400"
+            onClick={logout}
+          >
+            Logout
           </Link>
         </nav>
       </aside>
