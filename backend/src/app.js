@@ -1,12 +1,17 @@
 import express from "express";
 import cookieParser from "cookie-parser";
-import {errorHandler,notFoundHandler,} from "./middlewares/errorMiddleware.js";
+import {
+  errorHandler,
+  notFoundHandler,
+} from "./middlewares/errorMiddleware.js";
 import { securityMiddleware } from "./middlewares/securityMiddleware.js";
 import loggerMiddleware from "./middlewares/loggerMiddleware.js";
 import authRoutes from "./routes/authRoutes.js"; // Import auth routes
 import leadRoutes from "./routes/leadRoutes.js"; // Import auth routes
 import activityRoutes from "./routes/activityRoutes.js"; // Import auth routes
 import notificationRoutes from "./routes/notificationRoutes.js"; // Import auth routes
+
+
 
 const app = express();
 
